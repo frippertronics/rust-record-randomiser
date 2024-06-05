@@ -1,7 +1,7 @@
 use curl::easy;
 use image::{load_from_memory_with_format, DynamicImage};
 use rand::Rng;
-use show_image::ImageInfo;
+use show_image::event;
 use std::{ffi::OsStr, path::Path, str::FromStr};
 
 const BASE_DISCOGS_URL: &str = "https://api.discogs.com/releases";
@@ -89,24 +89,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Please specify a CSV-filepath with the 'csv_file'-key!");
     let discogs_user_token = user_cfg
         .get_string("token")
-        .expect("Please specify a Discogs uset-token with the 'token'-key!");
+        .expect("Please specify a Discogs user-token with the 'token'-key!");
 
     let csv_path = Path::new(&csv_param).as_os_str();
-    let random_record = get_random_record_from_csv(&csv_path);
+    'program: loop {
+        let random_record = get_random_record_from_csv(&csv_path);
 
-    let artist = random_record.get(ARTIST_IDX).unwrap();
-    let album = random_record.get(ALBUM_IDX).unwrap();
-    let release_id = &random_record.get(RELEASE_ID_IDX).unwrap();
-    let record_image = download_record_image(&release_id, &discogs_user_token);
+        let artist = random_record.get(ARTIST_IDX).unwrap();
+        let album = random_record.get(ALBUM_IDX).unwrap();
+        let release_id = &random_record.get(RELEASE_ID_IDX).unwrap();
+        let record_image = download_record_image(&release_id, &discogs_user_token);
 
-    let display_str: String = String::from_str(artist)? + " - " + album;
-    let view = show_image::ImageView::new(
-        ImageInfo::rgb8(record_image.width(), record_image.height()),
-        record_image.as_bytes(),
-    );
-    let window = show_image::create_window(&display_str, show_image::WindowOptions::default())?;
-    window.set_image(&display_str, view)?;
-    window.wait_until_destroyed()?;
+        let view = show_image::ImageView::new(
+            show_image::ImageInfo::rgb8(record_image.width(), record_image.height()),
+            record_image.as_bytes(),
+        );
+        let display_str: String = String::from_str(artist)? + " - " + album;
+        let window = show_image::create_window(&display_str, show_image::WindowOptions::default())?;
+        window.set_image(&display_str, view)?;
+
+        'rand_loop: for window_event in window.event_channel()? {
+            match window_event {
+                event::WindowEvent::MouseButton(mouse_event) => {
+                    if (mouse_event.button == event::MouseButton::Left)
+                        && (mouse_event.state == event::ElementState::Pressed)
+                    {
+                        break 'rand_loop;
+                    }
+                }
+                event::WindowEvent::CloseRequested(close_event) => {
+                    if close_event.window_id == window.id() {
+                        break 'program;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
 
     Ok(())
 }
