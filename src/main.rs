@@ -2,7 +2,7 @@ use curl::easy;
 use image::{load_from_memory_with_format, DynamicImage};
 use rand::Rng;
 use show_image::event;
-use std::{ffi::OsStr, path::Path, str::FromStr};
+use std::{fs::File, path::Path, str::FromStr};
 
 const BASE_DISCOGS_URL: &str = "https://api.discogs.com/releases";
 const ARTIST_IDX: usize = 1;
@@ -10,8 +10,7 @@ const ALBUM_IDX: usize = 2;
 const RELEASE_ID_IDX: usize = 7;
 const USER_AGENT: &str = "RustRecordRandomiser/0.1 +https://frippertronics.com";
 
-fn get_random_record_from_csv(csv_path: &OsStr) -> csv::StringRecord {
-    let mut csv_reader = csv::Reader::from_path(csv_path).expect("Invalid CSV-filepath!");
+fn get_random_record_from_csv(csv_reader: &mut csv::Reader<File>) -> csv::StringRecord {
     let line_count = csv_reader.records().count();
     csv_reader
         .seek(csv::Position::new())
@@ -92,12 +91,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Please specify a Discogs user-token with the 'token'-key!");
 
     let csv_path = Path::new(&csv_param).as_os_str();
+    let mut csv_reader = csv::Reader::from_path(csv_path).expect("Invalid CSV-filepath!");
     'program: loop {
-        let random_record = get_random_record_from_csv(&csv_path);
+        let random_record = get_random_record_from_csv(&mut csv_reader);
 
         let artist = random_record.get(ARTIST_IDX).unwrap();
         let album = random_record.get(ALBUM_IDX).unwrap();
-        let release_id = &random_record.get(RELEASE_ID_IDX).unwrap();
+        let release_id = random_record.get(RELEASE_ID_IDX).unwrap();
         let record_image = download_record_image(&release_id, &discogs_user_token);
 
         let view = show_image::ImageView::new(
